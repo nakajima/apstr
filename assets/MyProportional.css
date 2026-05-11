@@ -1,0 +1,108 @@
+
+@font-face {
+	font-family: 'MyProportional Web';
+	font-display: swap;
+	font-weight: 400;
+	font-stretch: normal;
+	font-style: normal;
+	src: url('WOFF2/MyProportional-Regular.woff2') format('woff2'), url('TTF/MyProportional-Regular.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'MyProportional Web';
+	font-display: swap;
+	font-weight: 400;
+	font-stretch: expanded;
+	font-style: normal;
+	src: url('WOFF2/MyProportional-Extended.woff2') format('woff2'), url('TTF/MyProportional-Extended.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'MyProportional Web';
+	font-display: swap;
+	font-weight: 400;
+	font-stretch: normal;
+	font-style: italic;
+	src: url('WOFF2/MyProportional-Italic.woff2') format('woff2'), url('TTF/MyProportional-Italic.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'MyProportional Web';
+	font-display: swap;
+	font-weight: 400;
+	font-stretch: expanded;
+	font-style: italic;
+	src: url('WOFF2/MyProportional-ExtendedItalic.woff2') format('woff2'), url('TTF/MyProportional-ExtendedItalic.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'MyProportional Web';
+	font-display: swap;
+	font-weight: 700;
+	font-stretch: normal;
+	font-style: normal;
+	src: url('WOFF2/MyProportional-Bold.woff2') format('woff2'), url('TTF/MyProportional-Bold.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'MyProportional Web';
+	font-display: swap;
+	font-weight: 700;
+	font-stretch: expanded;
+	font-style: normal;
+	src: url('WOFF2/MyProportional-ExtendedBold.woff2') format('woff2'), url('TTF/MyProportional-ExtendedBold.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'MyProportional Web';
+	font-display: swap;
+	font-weight: 700;
+	font-stretch: normal;
+	font-style: italic;
+	src: url('WOFF2/MyProportional-BoldItalic.woff2') format('woff2'), url('TTF/MyProportional-BoldItalic.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'MyProportional Web';
+	font-display: swap;
+	font-weight: 700;
+	font-stretch: expanded;
+	font-style: italic;
+	src: url('WOFF2/MyProportional-ExtendedBoldItalic.woff2') format('woff2'), url('TTF/MyProportional-ExtendedBoldItalic.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'MyProportional Web';
+	font-display: swap;
+	font-weight: 100;
+	font-stretch: normal;
+	font-style: normal;
+	src: url('WOFF2/MyProportional-Thin.woff2') format('woff2'), url('TTF/MyProportional-Thin.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'MyProportional Web';
+	font-display: swap;
+	font-weight: 100;
+	font-stretch: expanded;
+	font-style: normal;
+	src: url('WOFF2/MyProportional-ExtendedThin.woff2') format('woff2'), url('TTF/MyProportional-ExtendedThin.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'MyProportional Web';
+	font-display: swap;
+	font-weight: 100;
+	font-stretch: normal;
+	font-style: italic;
+	src: url('WOFF2/MyProportional-ThinItalic.woff2') format('woff2'), url('TTF/MyProportional-ThinItalic.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'MyProportional Web';
+	font-display: swap;
+	font-weight: 100;
+	font-stretch: expanded;
+	font-style: italic;
+	src: url('WOFF2/MyProportional-ExtendedThinItalic.woff2') format('woff2'), url('TTF/MyProportional-ExtendedThinItalic.ttf') format('truetype');
+}

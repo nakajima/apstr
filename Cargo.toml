@@ -1,0 +1,17 @@
+[package]
+name = "apstr"
+version = "0.1.1"
+edition = "2024"
+
+[dependencies]
+anyhow = { version = "1.0.102", features = ["backtrace"] }
+axum = { version = "0.8.9" }
+maud = "0.27.0"
+rusqlite = "0.39.0"
+seekwel = { version = "0.1.15", features = ["serde"] }
+seekwel-forms = "0.1.0"
+serde = { version = "1.0.228", features = ["serde_derive"] }
+tokio = { version = "1.52.2", features = ["full"] }
+tower-http = { version = "0.6.6", features = ["fs"] }
+tracing = { version = "0.1.44", features = ["async-await"] }
+tracing-subscriber = "0.3.23"
