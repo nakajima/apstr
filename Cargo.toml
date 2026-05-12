@@ -6,12 +6,21 @@ edition = "2024"
 [dependencies]
 anyhow = { version = "1.0.102", features = ["backtrace"] }
 axum = { version = "0.8.9" }
+bitflags = "2.11.1"
+jiff = { version = "0.2.24", features = ["serde"] }
+jsonwebtoken = "9"
 maud = "0.27.0"
+reqwest = { version = "0.12", default-features = false, features = [
+  "json",
+  "rustls-tls",
+] }
 rusqlite = "0.39.0"
-seekwel = { version = "0.1.15", features = ["serde"] }
-seekwel-forms = "0.1.0"
+seekwel = { version = "0.1.17", features = ["serde", "tokio"] }
+seekwel-forms = "0.1.1"
 serde = { version = "1.0.228", features = ["serde_derive"] }
+serde_json = "1"
 tokio = { version = "1.52.2", features = ["full"] }
-tower-http = { version = "0.6.6", features = ["fs"] }
+tower-http = { version = "0.6.6", features = ["fs", "trace"] }
+tower-method-hax = { version = "0.1.0", features = ["axum"] }
 tracing = { version = "0.1.44", features = ["async-await"] }
 tracing-subscriber = "0.3.23"
