@@ -23,7 +23,7 @@ impl Syncer {
     }
 
     #[allow(unused)]
-    pub async fn start(&mut self) -> ! {
+    pub async fn start(mut self) -> ! {
         loop {
             if let Err(e) = self.fetch_apps().await {
                 tracing::error!("Error syncing: {e:?}");
@@ -57,6 +57,7 @@ impl Syncer {
                 tracing::debug!("creating local record for {}", name);
                 App::builder()
                     .name(name)
+                    .asc_id(asc_app.id)
                     .bundle_identifier(&bundle_id)
                     .create()?
             };

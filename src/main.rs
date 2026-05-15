@@ -5,6 +5,11 @@ mod library;
 mod models;
 mod views;
 
+#[cfg(not(debug_assertions))]
+mod embedded_assets {
+    include!(concat!(env!("OUT_DIR"), "/embedded_assets.rs"));
+}
+
 use anyhow::Context;
 use axum::{
     Router,
@@ -20,10 +25,9 @@ use seekwel::{
     connection::Connection,
     schema::{ApplyMode, SchemaBuilder},
 };
-use tower_http::{
-    services::ServeDir,
-    trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer},
-};
+#[cfg(debug_assertions)]
+use tower_http::services::ServeDir;
+use tower_http::trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer};
 use tower_method_hax::axum::MethodOverrideExt;
 
 use crate::models::{app::App, build::Build};
@@ -49,12 +53,12 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(not(debug_assertions))]
     {
         tracing::info!("starting syncer");
-        let mut syncer = crate::lib::syncer::Syncer::new();
+        let syncer = crate::library::syncer::Syncer::new();
         tokio::spawn(syncer.start());
     }
 
     let app = Router::new()
-        .nest_service("/assets", ServeDir::new("assets"))
+        .merge(asset_routes())
         .route("/", get(controllers::apps::index))
         .route("/apps", get(Redirect::to("/")))
         .route("/apps/new", get(controllers::apps::new))
@@ -84,6 +88,51 @@ async fn main() -> anyhow::Result<()> {
     axum::serve(listener, app).await.context("serving app")?;
 
     Ok(())
+}
+
+#[cfg(debug_assertions)]
+fn asset_routes() -> Router {
+    Router::new().nest_service("/assets", ServeDir::new("assets"))
+}
+
+#[cfg(not(debug_assertions))]
+fn asset_routes() -> Router {
+    Router::new().route("/assets/{*path}", get(embedded_asset))
+}
+
+#[cfg(not(debug_assertions))]
+async fn embedded_asset(axum::extract::Path(path): axum::extract::Path<String>) -> Response {
+    match embedded_assets::ASSETS
+        .iter()
+        .find(|asset| asset.path == path)
+    {
+        Some(asset) => {
+            let mut response = Body::from(asset.content).into_response();
+            response.headers_mut().insert(
+                header::CONTENT_TYPE,
+                axum::http::HeaderValue::from_static(asset_content_type(asset.path)),
+            );
+            response
+        }
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn asset_content_type(path: &str) -> &'static str {
+    match path.rsplit_once('.').map(|(_, extension)| extension) {
+        Some("css") => "text/css; charset=utf-8",
+        Some("woff2") => "font/woff2",
+        Some("woff") => "font/woff",
+        Some("ttf") => "font/ttf",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("ico") => "image/x-icon",
+        _ => "application/octet-stream",
+    }
 }
 
 async fn health() -> AppResult<&'static str> {

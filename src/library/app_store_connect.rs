@@ -197,6 +197,8 @@ async fn decode_response<T: DeserializeOwned>(
         .await
         .with_context(|| format!("reading App Store Connect {method} {path} response"))?;
 
+    log_payload(method, path, status, &bytes);
+
     if !status.is_success() {
         let body = String::from_utf8_lossy(&bytes);
         bail!("App Store Connect {method} {path} failed with {status}: {body}");
@@ -204,6 +206,32 @@ async fn decode_response<T: DeserializeOwned>(
 
     serde_json::from_slice(&bytes)
         .with_context(|| format!("decoding App Store Connect {method} {path} response"))
+}
+
+fn log_payload(method: &str, path: &str, status: reqwest::StatusCode, bytes: &[u8]) {
+    if !should_log_payloads() {
+        return;
+    }
+
+    let body = String::from_utf8_lossy(bytes);
+    tracing::info!(
+        method,
+        path,
+        status = %status,
+        payload = %body,
+        "App Store Connect payload"
+    );
+}
+
+fn should_log_payloads() -> bool {
+    std::env::var("ASC_LOG_PAYLOADS")
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
 }
 
 fn log_rate_limit(method: &str, path: &str, headers: &reqwest::header::HeaderMap) {

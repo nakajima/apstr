@@ -8,6 +8,7 @@ use crate::{
 #[model]
 pub struct App {
     pub id: u64,
+    pub asc_id: String,
     pub name: String,
     pub bundle_identifier: String,
     pub built_at: Option<i64>,
@@ -74,5 +75,13 @@ impl App {
         }
 
         Ok(())
+    }
+
+    pub fn latest_build(&self) -> anyhow::Result<Option<Build>> {
+        let mut builds = self.builds()?;
+        // TODO: this should be do-able in sql
+        builds.sort_by_key(|a| a.number.unwrap_or(0));
+        builds.reverse();
+        Ok(builds.first().cloned())
     }
 }
