@@ -5,12 +5,24 @@ use serde::Deserialize;
 
 use crate::models::app::App;
 
-#[derive(Clone, Copy, Deserialize)]
+#[derive(Clone, Copy, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Timestamp(jiff::Timestamp);
 
 impl Timestamp {
-    pub fn now() -> Timestamp {
-        Self(jiff::Timestamp::now())
+    pub fn is_past(self) -> bool {
+        self.0 <= jiff::Timestamp::now()
+    }
+
+    pub fn days_until_floor(self) -> i64 {
+        let seconds = self.0.duration_since(jiff::Timestamp::now()).as_secs();
+        seconds.max(0) / 86_400
+    }
+
+    pub fn utc_date(self) -> String {
+        jiff::tz::TimeZone::UTC
+            .to_datetime(self.0)
+            .date()
+            .to_string()
     }
 }
 

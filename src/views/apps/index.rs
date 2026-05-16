@@ -1,11 +1,7 @@
 use axum::response::Html;
 use maud::html;
 
-use crate::{
-    error::AppResult,
-    models::{app::App, build::BuildColumns},
-    views::layout::page,
-};
+use crate::{error::AppResult, models::app::App, views::layout::page};
 
 pub async fn index(apps: &[App]) -> AppResult<Html<String>> {
     Ok(Html(
@@ -40,8 +36,26 @@ pub async fn index(apps: &[App]) -> AppResult<Html<String>> {
                                     }
                                 }
 
+                                @if let Some(test_flight_build) = app.current_test_flight_build()? {
+                                    @if test_flight_build.is_valid() {
+                                        " "
+                                        small {
+                                            "TestFlight"
+                                            @if let Some(version) = &test_flight_build.version {
+                                                " " (version)
+                                            }
+                                            " - "
+                                            (test_flight_build.expiration_status())
+                                        }
+                                    }
+                                }
+
                                 " "
                                 small { (app.bundle_identifier) }
+
+                                @if let Some(sync_error) = &app.sync_error {
+                                    small { "sync error: " (sync_error) }
+                                }
                             }
                         }
                     }

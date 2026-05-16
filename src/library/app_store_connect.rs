@@ -2,15 +2,25 @@ use anyhow::{Context, bail};
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+use tokio::{
+    sync::Mutex,
+    time::{self, Instant},
+};
 
 const BASE_URL: &str = "https://api.appstoreconnect.apple.com/v1";
 const TOKEN_LIFETIME_SECONDS: u64 = 15 * 60;
+const RATE_LIMIT_REMAINING_BACKOFF_THRESHOLD: u64 = 100;
+const RATE_LIMIT_LOW_BACKOFF: Duration = Duration::from_secs(60);
 
 #[derive(Clone)]
 pub struct AppStoreConnectClient {
     http: reqwest::Client,
     token_encoder: ConnectTokenEncoder,
+    rate_limit_state: Arc<Mutex<RateLimitState>>,
 }
 
 impl AppStoreConnectClient {
@@ -31,6 +41,7 @@ impl AppStoreConnectClient {
                 issuer_id,
                 encoding_key,
             },
+            rate_limit_state: Arc::new(Mutex::new(RateLimitState::default())),
         })
     }
 
@@ -115,6 +126,32 @@ impl AppStoreConnectClient {
         Ok(response.data.into_iter().map(CiBuildRun::from).collect())
     }
 
+    pub async fn test_flight_builds_for_app(
+        &self,
+        app_id: &str,
+        limit: u16,
+    ) -> anyhow::Result<Vec<AscTestFlightBuild>> {
+        let limit = limit.to_string();
+        let response: JsonApiList<TestFlightBuildAttributes> = self
+            .get(
+                &format!("/apps/{app_id}/builds"),
+                &[
+                    (
+                        "fields[builds]",
+                        "version,uploadedDate,expirationDate,expired,processingState",
+                    ),
+                    ("limit", limit.as_str()),
+                ],
+            )
+            .await?;
+
+        Ok(response
+            .data
+            .into_iter()
+            .map(AscTestFlightBuild::from)
+            .collect())
+    }
+
     pub async fn start_build(&self, workflow_id: &str, clean: bool) -> anyhow::Result<CiBuildRun> {
         let attributes = if clean {
             json!({ "clean": true })
@@ -146,6 +183,8 @@ impl AppStoreConnectClient {
         path: &str,
         query: &[(&str, &str)],
     ) -> anyhow::Result<T> {
+        self.wait_for_rate_limit_backoff("GET", path).await;
+
         let url = format!("{BASE_URL}{path}");
         let mut request = self.http.get(&url).bearer_auth(self.token_encoder.token()?);
         if !query.is_empty() {
@@ -156,10 +195,14 @@ impl AppStoreConnectClient {
             .send()
             .await
             .with_context(|| format!("sending App Store Connect GET {path}"))?;
+        self.handle_rate_limit("GET", path, response.headers())
+            .await;
         decode_response("GET", path, response).await
     }
 
     async fn get_url<T: DeserializeOwned>(&self, url: &str) -> anyhow::Result<T> {
+        self.wait_for_rate_limit_backoff("GET", url).await;
+
         let response = self
             .http
             .get(url)
@@ -167,10 +210,13 @@ impl AppStoreConnectClient {
             .send()
             .await
             .with_context(|| format!("sending App Store Connect GET {url}"))?;
+        self.handle_rate_limit("GET", url, response.headers()).await;
         decode_response("GET", url, response).await
     }
 
     async fn post<T: DeserializeOwned>(&self, path: &str, body: &Value) -> anyhow::Result<T> {
+        self.wait_for_rate_limit_backoff("POST", path).await;
+
         let url = format!("{BASE_URL}{path}");
         let response = self
             .http
@@ -180,7 +226,94 @@ impl AppStoreConnectClient {
             .send()
             .await
             .with_context(|| format!("sending App Store Connect POST {path}"))?;
+        self.handle_rate_limit("POST", path, response.headers())
+            .await;
         decode_response("POST", path, response).await
+    }
+
+    async fn wait_for_rate_limit_backoff(&self, method: &str, path: &str) {
+        loop {
+            let backoff_until = {
+                let mut state = self.rate_limit_state.lock().await;
+                match state.backoff_until {
+                    Some(backoff_until) if backoff_until > Instant::now() => Some(backoff_until),
+                    Some(_) => {
+                        state.backoff_until = None;
+                        None
+                    }
+                    None => None,
+                }
+            };
+
+            let Some(backoff_until) = backoff_until else {
+                return;
+            };
+
+            let delay = backoff_until.saturating_duration_since(Instant::now());
+            tracing::warn!(
+                method,
+                path,
+                ?delay,
+                "backing off App Store Connect request because rate limit is low"
+            );
+            time::sleep_until(backoff_until).await;
+        }
+    }
+
+    async fn handle_rate_limit(
+        &self,
+        method: &str,
+        path: &str,
+        headers: &reqwest::header::HeaderMap,
+    ) {
+        let Some(value) = headers.get("X-Rate-Limit") else {
+            return;
+        };
+
+        let Ok(value) = value.to_str() else {
+            tracing::debug!(
+                method,
+                path,
+                "App Store Connect X-Rate-Limit header was invalid"
+            );
+            return;
+        };
+
+        let rate_limit = RateLimit::parse(value);
+        tracing::debug!(
+            method,
+            path,
+            rate_limit = rate_limit.raw.as_str(),
+            user_hour_limit = rate_limit.user_hour_limit,
+            user_hour_remaining = rate_limit.user_hour_remaining,
+            "App Store Connect rate limit"
+        );
+
+        let Some(user_hour_remaining) = rate_limit.user_hour_remaining else {
+            return;
+        };
+        if user_hour_remaining >= RATE_LIMIT_REMAINING_BACKOFF_THRESHOLD {
+            return;
+        }
+
+        let backoff_until = Instant::now() + RATE_LIMIT_LOW_BACKOFF;
+        let mut state = self.rate_limit_state.lock().await;
+        let should_update = state
+            .backoff_until
+            .map(|current| current < backoff_until)
+            .unwrap_or(true);
+        if should_update {
+            state.backoff_until = Some(backoff_until);
+        }
+
+        tracing::warn!(
+            method,
+            path,
+            user_hour_remaining,
+            threshold = RATE_LIMIT_REMAINING_BACKOFF_THRESHOLD,
+            backoff = ?RATE_LIMIT_LOW_BACKOFF,
+            "App Store Connect rate limit is low; backing off"
+        );
     }
 }
 
@@ -190,7 +323,6 @@ async fn decode_response<T: DeserializeOwned>(
     response: reqwest::Response,
 ) -> anyhow::Result<T> {
     let status = response.status();
-    log_rate_limit(method, path, response.headers());
 
     let bytes = response
         .bytes()
@@ -234,42 +366,39 @@ fn should_log_payloads() -> bool {
         .unwrap_or(false)
 }
 
-fn log_rate_limit(method: &str, path: &str, headers: &reqwest::header::HeaderMap) {
-    let Some(value) = headers.get("X-Rate-Limit") else {
-        return;
-    };
+#[derive(Default)]
+struct RateLimitState {
+    backoff_until: Option<Instant>,
+}
 
-    let Ok(value) = value.to_str() else {
-        tracing::debug!(
-            method,
-            path,
-            "App Store Connect X-Rate-Limit header was invalid"
-        );
-        return;
-    };
+struct RateLimit {
+    raw: String,
+    user_hour_limit: Option<u64>,
+    user_hour_remaining: Option<u64>,
+}
 
-    let mut user_hour_limit = None;
-    let mut user_hour_remaining = None;
-    for part in value.split(';') {
-        let Some((key, raw_value)) = part.split_once(':') else {
-            continue;
+impl RateLimit {
+    fn parse(value: &str) -> Self {
+        let mut rate_limit = Self {
+            raw: value.to_owned(),
+            user_hour_limit: None,
+            user_hour_remaining: None,
         };
-        let parsed = raw_value.parse::<u64>().ok();
-        match key {
-            "user-hour-lim" => user_hour_limit = parsed,
-            "user-hour-rem" => user_hour_remaining = parsed,
-            _ => {}
-        }
-    }
 
-    tracing::debug!(
-        method,
-        path,
-        rate_limit = value,
-        user_hour_limit,
-        user_hour_remaining,
-        "App Store Connect rate limit"
-    );
+        for part in value.split(';') {
+            let Some((key, raw_value)) = part.split_once(':') else {
+                continue;
+            };
+            let parsed = raw_value.trim().parse::<u64>().ok();
+            match key.trim() {
+                "user-hour-lim" => rate_limit.user_hour_limit = parsed,
+                "user-hour-rem" => rate_limit.user_hour_remaining = parsed,
+                _ => {}
+            }
+        }
+
+        rate_limit
+    }
 }
 
 fn required_env(name: &str) -> anyhow::Result<String> {
@@ -367,6 +496,16 @@ pub struct CiBuildRun {
     pub cancel_reason: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct AscTestFlightBuild {
+    pub id: String,
+    pub version: Option<String>,
+    pub uploaded_date: Option<String>,
+    pub expiration_date: Option<String>,
+    pub expired: Option<bool>,
+    pub processing_state: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 struct JsonApiList<T> {
     data: Vec<JsonApiResource<T>>,
@@ -425,6 +564,16 @@ struct CiBuildRunAttributes {
     cancel_reason: Option<String>,
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TestFlightBuildAttributes {
+    version: Option<String>,
+    uploaded_date: Option<String>,
+    expiration_date: Option<String>,
+    expired: Option<bool>,
+    processing_state: Option<String>,
+}
+
 impl From<JsonApiResource<AscAppAttributes>> for AscApp {
     fn from(resource: JsonApiResource<AscAppAttributes>) -> Self {
         let attributes = resource.attributes.unwrap_or_default();
@@ -473,6 +622,20 @@ impl From<JsonApiResource<CiBuildRunAttributes>> for CiBuildRun {
             completion_status: attributes.completion_status,
             start_reason: attributes.start_reason,
             cancel_reason: attributes.cancel_reason,
+        }
+    }
+}
+
+impl From<JsonApiResource<TestFlightBuildAttributes>> for AscTestFlightBuild {
+    fn from(resource: JsonApiResource<TestFlightBuildAttributes>) -> Self {
+        let attributes = resource.attributes.unwrap_or_default();
+        Self {
+            id: resource.id,
+            version: attributes.version,
+            uploaded_date: attributes.uploaded_date,
+            expiration_date: attributes.expiration_date,
+            expired: attributes.expired,
+            processing_state: attributes.processing_state,
         }
     }
 }

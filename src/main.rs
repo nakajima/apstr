@@ -30,7 +30,7 @@ use tower_http::services::ServeDir;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer};
 use tower_method_hax::axum::MethodOverrideExt;
 
-use crate::models::{app::App, build::Build};
+use crate::models::{app::App, build::Build, test_flight_build::TestFlightBuild};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -40,6 +40,7 @@ async fn main() -> anyhow::Result<()> {
     let plan = SchemaBuilder::new()
         .model::<App>()
         .model::<Build>()
+        .model::<TestFlightBuild>()
         .plan()
         .expect("could not plan schema");
 
@@ -50,12 +51,9 @@ async fn main() -> anyhow::Result<()> {
     plan.apply(ApplyMode::AllowDestructive)
         .expect("could not apply plan");
 
-    #[cfg(not(debug_assertions))]
-    {
-        tracing::info!("starting syncer");
-        let syncer = crate::library::syncer::Syncer::new();
-        tokio::spawn(syncer.start());
-    }
+    tracing::info!("starting syncer");
+    let syncer = crate::library::syncer::Syncer::new().context("initializing syncer")?;
+    tokio::spawn(syncer.start());
 
     let app = Router::new()
         .merge(asset_routes())

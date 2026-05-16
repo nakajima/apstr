@@ -30,7 +30,6 @@ pub async fn new() -> AppResult<Html<String>> {
 
 pub async fn show(Path(id): Path<u64>) -> AppResult<Html<String>> {
     let app = App::find(id).with_context(|| format!("loading app {id}"))?;
-    app.clone().refresh().await?;
 
     views::apps::show(&app).await
 }

@@ -1,8 +1,12 @@
-use seekwel::{HasMany, model};
+use anyhow::Context;
+use seekwel::{HasMany, PersistedModel, model};
 
 use crate::{
     library::app_store_connect::AppStoreConnectClient,
-    models::build::{Build, BuildColumns, Timestamp},
+    models::{
+        build::{Build, BuildColumns, Timestamp},
+        test_flight_build::{TestFlightBuild, TestFlightBuildColumns},
+    },
 };
 
 #[model]
@@ -12,13 +16,15 @@ pub struct App {
     pub name: String,
     pub bundle_identifier: String,
     pub built_at: Option<i64>,
+    pub sync_error: Option<String>,
     pub builds: HasMany<Build, { BuildColumns::APP_ID }>,
+    pub test_flight_builds: HasMany<TestFlightBuild, { TestFlightBuildColumns::APP_ID }>,
 }
 
 impl App {
-    pub async fn refresh(mut self) -> anyhow::Result<()> {
+    pub async fn refresh(mut self, client: &AppStoreConnectClient) -> anyhow::Result<()> {
         tracing::debug!("refreshing {}", self.name);
-        let client = AppStoreConnectClient::from_env()?;
+        let mut app_changed = self.sync_error.is_some();
         let Some(asc_app) = client.app_for_bundle_id(&self.bundle_identifier).await? else {
             return Err(anyhow::anyhow!(
                 "did not find ASC app for bundle ID `{}`",
@@ -64,14 +70,46 @@ impl App {
             // TODO: This is messy
             if let Some(asc_built_at) = asc_build.started_date.map(|d| d.parse::<Timestamp>()) {
                 let asc_built_at = asc_built_at?.into();
-                if let Some(built_at) = &self.built_at
-                    && *built_at < asc_built_at
-                {
+                let is_newer = self
+                    .built_at
+                    .map(|built_at| built_at < asc_built_at)
+                    .unwrap_or(true);
+                if is_newer {
                     self.built_at = Some(asc_built_at);
-                } else if self.built_at.is_none() {
-                    self.built_at = Some(asc_built_at);
+                    app_changed = true;
                 }
             }
+        }
+
+        let test_flight_builds = client.test_flight_builds_for_app(&asc_app.id, 20).await?;
+        for asc_build in test_flight_builds {
+            tracing::info!("importing TestFlight build {}", asc_build.id);
+            TestFlightBuild::builder()
+                .app(self.clone())
+                .asc_id(asc_build.id)
+                .version(asc_build.version)
+                .uploaded_date(
+                    asc_build
+                        .uploaded_date
+                        .as_ref()
+                        .map(|v| v.parse::<Timestamp>())
+                        .transpose()?,
+                )
+                .expiration_date(
+                    asc_build
+                        .expiration_date
+                        .as_ref()
+                        .map(|v| v.parse::<Timestamp>())
+                        .transpose()?,
+                )
+                .expired(asc_build.expired)
+                .processing_state(asc_build.processing_state)
+                .create_or_update_by([TestFlightBuildColumns::AscId])?;
+        }
+
+        if app_changed {
+            self.sync_error = None;
+            self.save().context("saving refreshed app")?;
         }
 
         Ok(())
@@ -82,6 +120,25 @@ impl App {
         // TODO: this should be do-able in sql
         builds.sort_by_key(|a| a.number.unwrap_or(0));
         builds.reverse();
+        Ok(builds.first().cloned())
+    }
+
+    pub fn current_test_flight_build(&self) -> anyhow::Result<Option<TestFlightBuild>> {
+        let mut builds = self.test_flight_builds()?;
+        builds.sort_by_key(|build| (build.uploaded_date, build.expiration_date));
+        builds.reverse();
+
+        if let Some(build) = builds
+            .iter()
+            .find(|build| build.is_valid() && !build.is_expired())
+        {
+            return Ok(Some(build.clone()));
+        }
+
+        if let Some(build) = builds.iter().find(|build| build.is_valid()) {
+            return Ok(Some(build.clone()));
+        }
+
         Ok(builds.first().cloned())
     }
 }
