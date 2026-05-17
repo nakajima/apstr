@@ -83,3 +83,24 @@ pub struct Build {
     pub start_reason: Option<String>,
     pub cancel_reason: Option<String>,
 }
+
+impl Build {
+    pub fn display_name(&self) -> String {
+        self.number
+            .map(|number| format!("build #{number}"))
+            .unwrap_or_else(|| "build".to_string())
+    }
+
+    pub fn status(&self) -> &str {
+        self.completion_status
+            .as_deref()
+            .or(self.execution_progress.as_deref())
+            .unwrap_or("unknown")
+    }
+
+    pub fn sort_timestamp(&self) -> Option<Timestamp> {
+        self.finished_date
+            .or(self.started_date)
+            .or(self.created_date)
+    }
+}

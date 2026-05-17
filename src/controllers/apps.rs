@@ -47,6 +47,11 @@ pub struct AutoBuildParams {
     enabled: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct HookScriptParams {
+    hook_script: String,
+}
+
 pub async fn update_auto_build(
     Path(id): Path<u64>,
     Form(params): Form<AutoBuildParams>,
@@ -58,6 +63,23 @@ pub async fn update_auto_build(
     ));
     app.save()
         .with_context(|| format!("saving auto-build setting for app {id}"))?;
+
+    Ok(Redirect::to(&format!("/apps/{id}")))
+}
+
+pub async fn update_hook_script(
+    Path(id): Path<u64>,
+    Form(params): Form<HookScriptParams>,
+) -> AppResult<Redirect> {
+    let mut app = App::find(id).with_context(|| format!("loading app {id}"))?;
+    let hook_script = params.hook_script.trim();
+    app.hook_script = if hook_script.is_empty() {
+        None
+    } else {
+        Some(hook_script.to_string())
+    };
+    app.save()
+        .with_context(|| format!("saving hook script for app {id}"))?;
 
     Ok(Redirect::to(&format!("/apps/{id}")))
 }

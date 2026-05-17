@@ -71,6 +71,10 @@ async fn main() -> anyhow::Result<()> {
             "/apps/{id}/auto-build",
             post(controllers::apps::update_auto_build),
         )
+        .route(
+            "/apps/{id}/hook-script",
+            post(controllers::apps::update_hook_script),
+        )
         .route("/apps/{id}/builds", post(controllers::builds::create))
         .route("/apps", post(controllers::apps::create))
         .route("/_health", get(health))

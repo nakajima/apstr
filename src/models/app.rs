@@ -1,8 +1,8 @@
 use anyhow::Context;
-use seekwel::{HasMany, PersistedModel, model};
+use seekwel::{Comparison as Q, HasMany, ModelQueryDsl, PersistedModel, QueryDsl, model};
 
 use crate::{
-    library::app_store_connect::AppStoreConnectClient,
+    library::{app_store_connect::AppStoreConnectClient, hook_runner},
     models::{
         build::{Build, BuildColumns, Timestamp},
         test_flight_build::{TestFlightBuild, TestFlightBuildColumns},
@@ -18,6 +18,7 @@ pub struct App {
     pub bundle_identifier: String,
     pub built_at: Option<i64>,
     pub sync_error: Option<String>,
+    pub hook_script: Option<String>,
     pub auto_build_enabled: Option<bool>,
     pub auto_build_requested_at: Option<Timestamp>,
     pub auto_build_error: Option<String>,
@@ -57,7 +58,21 @@ impl App {
         let builds = client.build_runs_for_product(&product.id, 10).await?;
         for asc_build in builds {
             tracing::info!("importing ASC build {}", asc_build.id);
-            Build::builder()
+            let asc_build_id = asc_build.id.clone();
+            let started_date = asc_build.started_date.clone();
+            let completion_status = asc_build.completion_status.clone();
+            let previous = Build::q(BuildColumns::AscId, Q::Eq(asc_build_id.clone()))
+                .first()
+                .with_context(|| format!("loading local build {asc_build_id}"))?;
+            let previous_was_terminal = previous
+                .as_ref()
+                .and_then(|build| build.completion_status.as_deref())
+                .is_some_and(|status| !status.is_empty());
+            let is_terminal = completion_status
+                .as_deref()
+                .is_some_and(|status| !status.is_empty());
+
+            let build = Build::builder()
                 .app(self.clone())
                 .asc_id(asc_build.id)
                 .number(asc_build.number)
@@ -83,13 +98,17 @@ impl App {
                         .transpose()?,
                 )
                 .execution_progress(asc_build.execution_progress)
-                .completion_status(asc_build.completion_status)
+                .completion_status(completion_status)
                 .start_reason(asc_build.start_reason)
                 .cancel_reason(asc_build.cancel_reason)
                 .create_or_update_by([BuildColumns::AscId])?;
 
+            if previous.is_some() && !previous_was_terminal && is_terminal {
+                hook_runner::spawn_build_completed(&self, &build);
+            }
+
             // TODO: This is messy
-            if let Some(asc_built_at) = asc_build.started_date.map(|d| d.parse::<Timestamp>()) {
+            if let Some(asc_built_at) = started_date.map(|d| d.parse::<Timestamp>()) {
                 let asc_built_at = asc_built_at?.into();
                 let is_newer = self
                     .built_at
@@ -138,10 +157,17 @@ impl App {
 
     pub fn latest_build(&self) -> anyhow::Result<Option<Build>> {
         let mut builds = self.builds()?;
-        // TODO: this should be do-able in sql
-        builds.sort_by_key(|a| a.number.unwrap_or(0));
+        builds.sort_by_key(|build| (build.sort_timestamp(), build.number.unwrap_or(0)));
         builds.reverse();
         Ok(builds.first().cloned())
+    }
+
+    pub fn recent_builds(&self, limit: usize) -> anyhow::Result<Vec<Build>> {
+        let mut builds = self.builds()?;
+        builds.sort_by_key(|build| (build.sort_timestamp(), build.number.unwrap_or(0)));
+        builds.reverse();
+        builds.truncate(limit);
+        Ok(builds)
     }
 
     pub fn current_test_flight_build(&self) -> anyhow::Result<Option<TestFlightBuild>> {

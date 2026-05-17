@@ -9,7 +9,7 @@ use serde::Deserialize;
 
 use crate::{
     error::AppResult,
-    library::app_store_connect::AppStoreConnectClient,
+    library::{app_store_connect::AppStoreConnectClient, hook_runner},
     models::{
         app::App,
         build::{Build, BuildColumns, Timestamp},
@@ -52,8 +52,8 @@ pub async fn create(
         .await
         .with_context(|| format!("starting workflow {} for app {id}", workflow.asc_id))?;
 
-    Build::builder()
-        .app(app)
+    let build = Build::builder()
+        .app(app.clone())
         .asc_id(asc_build.id)
         .number(asc_build.number)
         .created_date(
@@ -83,6 +83,8 @@ pub async fn create(
         .cancel_reason(asc_build.cancel_reason)
         .create_or_update_by([BuildColumns::AscId])
         .context("saving started build")?;
+
+    hook_runner::spawn_build_started(&app, &build, &workflow);
 
     Ok(Redirect::to(&format!("/apps/{id}")).into_response())
 }

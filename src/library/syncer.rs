@@ -4,7 +4,7 @@ use anyhow::{Context, bail};
 use seekwel::{Comparison as Q, ModelQueryDsl, PersistedModel, QueryDsl};
 
 use crate::{
-    library::app_store_connect::AppStoreConnectClient,
+    library::{app_store_connect::AppStoreConnectClient, hook_runner},
     models::{
         app::{App, AppColumns},
         build::{Build, BuildColumns, Timestamp},
@@ -155,6 +155,14 @@ impl Syncer {
             return Ok(());
         }
 
+        if let Some(test_flight_build) = app.current_valid_test_flight_build()? {
+            if test_flight_build.is_expired() {
+                hook_runner::spawn_testflight_expired(&app, &test_flight_build);
+            } else if test_flight_build.expires_within_days(7) {
+                hook_runner::spawn_testflight_expiring(&app, &test_flight_build);
+            }
+        }
+
         let workflow_id = workflow.asc_id.clone();
         let workflow_name = workflow.display_name().to_string();
         tracing::info!(
@@ -175,8 +183,8 @@ impl Syncer {
         app.save()
             .with_context(|| format!("saving automatic build request for app {}", app.id))?;
 
-        Build::builder()
-            .app(app)
+        let build = Build::builder()
+            .app(app.clone())
             .asc_id(asc_build.id)
             .number(asc_build.number)
             .created_date(
@@ -206,6 +214,8 @@ impl Syncer {
             .cancel_reason(asc_build.cancel_reason)
             .create_or_update_by([BuildColumns::AscId])
             .context("saving automatically started build")?;
+
+        hook_runner::spawn_build_auto_started(&app, &build, &workflow);
 
         Ok(())
     }

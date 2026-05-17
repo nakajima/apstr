@@ -1,9 +1,11 @@
 :root {
-  /* https://colorpalette.pro/?color=oklch%2876.4%25+0.137+201%29&paletteType=tri&paletteStyle=circle&colorFormat=oklch&effects=0%2C0%2C0%2C0 */
-  --bg: oklch(19% 0.006 201);
+  /* https://colorpalette.pro/?color=oklch%2895.8%25+0.188+167%29&paletteType=tri&paletteStyle=circle&colorFormat=oklch&effects=0%2C0%2C0%2C0 */
+  --bg: oklch(14% 0.004 201);
   --fg: oklch(95% 0.01 201);
   --primary: oklch(76.4% 0.137 201);
-  --accent: oklch(80% 0.08 13.7);
+  --accent: oklch(80% 0.08 351);
+  --error: oklch(65.8% 0.169 17);
+  --success: oklch(55.8% 0.207 167);
 }
 
 html,
@@ -17,6 +19,10 @@ body {
 
 body {
   padding: 1rem 2rem;
+}
+
+.subdue {
+  color: oklch(62.5% 0.01 167);
 }
 
 a,
@@ -37,6 +43,11 @@ button.link {
 .hstack {
   display: flex;
   align-items: baseline;
+}
+
+.hstack.middle {
+  display: flex;
+  align-items: center;
 }
 
 .gap-2 {
@@ -80,4 +91,14 @@ button.link {
 label {
   display: block;
   margin-top: 1rem;
+}
+
+.error {
+  background: var(--error);
+  padding: 0 2px;
+  color: white;
+}
+
+.success {
+  color: var(--success);
 }

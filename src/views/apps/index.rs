@@ -21,34 +21,35 @@ pub async fn index(apps: &[App]) -> AppResult<Html<String>> {
                                 }
 
                                 @if let Some(build) = app.latest_build()? && let Some(number) = build.number {
-                                    small {
-                                      a target="_blank" href=(format!(
-                                          "https://appstoreconnect.apple.com/teams/{}/apps/{}/ci/builds/{}",
-                                          asc_issuer_id,
-                                          app.asc_id,
-                                          build.asc_id
-                                      )) {
-                                        (format!("build #{}", number))
-                                      }
-                                      " - "
-                                      @if let Some(result) = &build.completion_status {
-                                        (result)
-                                      } @else if let Some(progress) = &build.execution_progress {
-                                        (progress)
-                                      }
-                                    }
-                                }
+                                    small.subdue.hstack.middle.gap-2 {
+                                        @if build.completion_status == Some("FAILED".into()) {
+                                            ion-icon name="alert" aria-hidden="true" {};
+                                        } @else if build.completion_status == Some("SUCCEEDED".into()) {
+                                            ion-icon name="checkmark" aria-hidden="true" {};
+                                        } @else {
+                                            ion-icon name="ellipsis-horizontal" aria-hidden="true" {};
+                                        }
 
-                                @if let Some(test_flight_build) = app.current_test_flight_build()? {
-                                    @if test_flight_build.is_valid() {
-                                        " "
-                                        small {
-                                            "TestFlight"
-                                            @if let Some(version) = &test_flight_build.version {
-                                                " " (version)
+                                        a target="_blank" class="subdue" href=(format!(
+                                            "https://appstoreconnect.apple.com/teams/{}/apps/{}/ci/builds/{}",
+                                            asc_issuer_id,
+                                            app.asc_id,
+                                            build.asc_id
+                                        )) {
+                                            (format!("build #{}", number))
+                                        }
+                                        @if let Some(result) = &build.completion_status {
+                                            (result)
+                                        } @else if let Some(progress) = &build.execution_progress {
+                                            (progress)
+                                        }
+
+                                        @if let Some(test_flight_build) = app.current_test_flight_build()? {
+                                            @if test_flight_build.is_valid() {
+                                                span class=(if test_flight_build.expiration_status() == "Expired" { "error" } else { "" }) {
+                                                    (test_flight_build.expiration_status())
+                                                }
                                             }
-                                            " - "
-                                            (test_flight_build.expiration_status())
                                         }
                                     }
                                 }

@@ -24,6 +24,9 @@ pub fn page(title: &str, body: Markup) -> Markup {
 
                 }
                 (body)
+
+                script type="module" src="https://cdn.jsdelivr.net/npm/ionicons@latest/dist/ionicons/ionicons.esm.js" {}
+                script src="https://cdn.jsdelivr.net/npm/ionicons@latest/dist/ionicons/ionicons.js" nomodule {}
             }
         }
     }
