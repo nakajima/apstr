@@ -1,9 +1,12 @@
+use anyhow::Context;
 use axum::response::Html;
 use maud::html;
 
 use crate::{error::AppResult, models::app::App, views::layout::page};
 
 pub async fn index(apps: &[App]) -> AppResult<Html<String>> {
+    let asc_issuer_id = std::env::var("ASC_ISSUER_ID").context("loading ASC_ISSUER_ID")?;
+
     Ok(Html(
         page(
             "apps",
@@ -21,7 +24,7 @@ pub async fn index(apps: &[App]) -> AppResult<Html<String>> {
                                     small {
                                       a target="_blank" href=(format!(
                                           "https://appstoreconnect.apple.com/teams/{}/apps/{}/ci/builds/{}",
-                                          env!("ASC_ISSUER_ID"),
+                                          asc_issuer_id,
                                           app.asc_id,
                                           build.asc_id
                                       )) {
