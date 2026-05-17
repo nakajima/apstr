@@ -20,9 +20,12 @@ pub struct App {
     pub sync_error: Option<String>,
     pub auto_build_requested_at: Option<Timestamp>,
     pub auto_build_error: Option<String>,
-    pub builds: HasMany<Build, { BuildColumns::APP_ID }>,
-    pub test_flight_builds: HasMany<TestFlightBuild, { TestFlightBuildColumns::APP_ID }>,
-    pub workflows: HasMany<Workflow, { WorkflowColumns::APP_ID }>,
+    #[key = app_id]
+    pub builds: HasMany<Build>,
+    #[key = app_id]
+    pub test_flight_builds: HasMany<TestFlightBuild>,
+    #[key = app_id]
+    pub workflows: HasMany<Workflow>,
 }
 
 impl App {

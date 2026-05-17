@@ -38,9 +38,9 @@ impl Timestamp {
     }
 }
 
-impl Into<i64> for Timestamp {
-    fn into(self) -> i64 {
-        self.0.as_microsecond()
+impl From<Timestamp> for i64 {
+    fn from(val: Timestamp) -> Self {
+        val.0.as_microsecond()
     }
 }
 
