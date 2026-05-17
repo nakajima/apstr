@@ -5,7 +5,10 @@ use seekwel::{Comparison as Q, ModelQueryDsl, PersistedModel, QueryDsl};
 
 use crate::{
     library::app_store_connect::AppStoreConnectClient,
-    models::app::{App, AppColumns},
+    models::{
+        app::{App, AppColumns},
+        build::{Build, BuildColumns, Timestamp},
+    },
 };
 
 const SYNC_INTERVAL: Duration = Duration::from_secs(60);
@@ -121,7 +124,88 @@ impl Syncer {
             app.sync_error = Some(sync_error);
             app.save()
                 .with_context(|| format!("saving sync error for app {app_id}"))?;
+            return Ok(());
         }
+
+        let app = App::find(app_id)
+            .with_context(|| format!("loading app {app_id} for automatic build check"))?;
+        if let Err(error) = Self::start_auto_build_if_needed(app, client).await {
+            let auto_build_error = format!("{error:#}");
+            tracing::error!(app_id, app_name, error = %auto_build_error, "automatic build failed");
+
+            let mut app = App::find(app_id)
+                .with_context(|| format!("loading app {app_id} to record automatic build error"))?;
+            app.auto_build_error = Some(auto_build_error);
+            app.save()
+                .with_context(|| format!("saving automatic build error for app {app_id}"))?;
+        }
+
+        Ok(())
+    }
+
+    async fn start_auto_build_if_needed(
+        mut app: App,
+        client: &AppStoreConnectClient,
+    ) -> anyhow::Result<()> {
+        let Some(workflow) = app.first_startable_workflow()? else {
+            return Ok(());
+        };
+
+        if !app.needs_auto_build()? {
+            return Ok(());
+        }
+
+        let workflow_id = workflow.asc_id.clone();
+        let workflow_name = workflow.display_name().to_string();
+        tracing::info!(
+            app_id = app.id,
+            app_name = %app.name,
+            workflow_id = %workflow_id,
+            workflow_name = %workflow_name,
+            "starting automatic clean build"
+        );
+
+        let asc_build = client
+            .start_build(&workflow_id, true)
+            .await
+            .with_context(|| format!("starting automatic workflow {workflow_id}"))?;
+
+        app.auto_build_requested_at = Some(Timestamp::now());
+        app.auto_build_error = None;
+        app.save()
+            .with_context(|| format!("saving automatic build request for app {}", app.id))?;
+
+        Build::builder()
+            .app(app)
+            .asc_id(asc_build.id)
+            .number(asc_build.number)
+            .created_date(
+                asc_build
+                    .created_date
+                    .as_ref()
+                    .map(|v| v.parse::<Timestamp>())
+                    .transpose()?,
+            )
+            .started_date(
+                asc_build
+                    .started_date
+                    .as_ref()
+                    .map(|v| v.parse::<Timestamp>())
+                    .transpose()?,
+            )
+            .finished_date(
+                asc_build
+                    .finished_date
+                    .as_ref()
+                    .map(|v| v.parse::<Timestamp>())
+                    .transpose()?,
+            )
+            .execution_progress(asc_build.execution_progress)
+            .completion_status(asc_build.completion_status)
+            .start_reason(asc_build.start_reason)
+            .cancel_reason(asc_build.cancel_reason)
+            .create_or_update_by([BuildColumns::AscId])
+            .context("saving automatically started build")?;
 
         Ok(())
     }

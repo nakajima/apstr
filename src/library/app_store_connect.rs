@@ -45,6 +45,7 @@ impl AppStoreConnectClient {
         })
     }
 
+    #[allow(unused)]
     pub async fn overview_for_bundle_id(
         &self,
         bundle_id: &str,

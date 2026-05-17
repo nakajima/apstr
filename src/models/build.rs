@@ -9,8 +9,20 @@ use crate::models::app::App;
 pub struct Timestamp(jiff::Timestamp);
 
 impl Timestamp {
+    pub fn now() -> Self {
+        Self(jiff::Timestamp::now())
+    }
+
     pub fn is_past(self) -> bool {
         self.0 <= jiff::Timestamp::now()
+    }
+
+    pub fn is_within_days(self, days: i64) -> bool {
+        self.0.duration_since(jiff::Timestamp::now()).as_secs() <= days * 86_400
+    }
+
+    pub fn is_within_last_hours(self, hours: i64) -> bool {
+        jiff::Timestamp::now().duration_since(self.0).as_secs() < hours * 3_600
     }
 
     pub fn days_until_floor(self) -> i64 {

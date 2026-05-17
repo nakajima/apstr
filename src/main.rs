@@ -30,7 +30,9 @@ use tower_http::services::ServeDir;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer};
 use tower_method_hax::axum::MethodOverrideExt;
 
-use crate::models::{app::App, build::Build, test_flight_build::TestFlightBuild};
+use crate::models::{
+    app::App, build::Build, test_flight_build::TestFlightBuild, workflow::Workflow,
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -41,6 +43,7 @@ async fn main() -> anyhow::Result<()> {
         .model::<App>()
         .model::<Build>()
         .model::<TestFlightBuild>()
+        .model::<Workflow>()
         .plan()
         .expect("could not plan schema");
 

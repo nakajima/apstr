@@ -26,6 +26,11 @@ impl TestFlightBuild {
                 .is_some_and(|expiration_date| expiration_date.is_past())
     }
 
+    pub fn expires_within_days(&self, days: i64) -> bool {
+        self.expiration_date
+            .is_some_and(|expiration_date| expiration_date.is_within_days(days))
+    }
+
     pub fn expiration_status(&self) -> String {
         if self.is_expired() {
             return "Expired".to_string();

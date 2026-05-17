@@ -6,6 +6,7 @@ use crate::{
     models::{
         build::{Build, BuildColumns, Timestamp},
         test_flight_build::{TestFlightBuild, TestFlightBuildColumns},
+        workflow::{Workflow, WorkflowColumns},
     },
 };
 
@@ -17,8 +18,11 @@ pub struct App {
     pub bundle_identifier: String,
     pub built_at: Option<i64>,
     pub sync_error: Option<String>,
+    pub auto_build_requested_at: Option<Timestamp>,
+    pub auto_build_error: Option<String>,
     pub builds: HasMany<Build, { BuildColumns::APP_ID }>,
     pub test_flight_builds: HasMany<TestFlightBuild, { TestFlightBuildColumns::APP_ID }>,
+    pub workflows: HasMany<Workflow, { WorkflowColumns::APP_ID }>,
 }
 
 impl App {
@@ -33,6 +37,19 @@ impl App {
         };
 
         let product = client.ci_product_for_app(&asc_app.id).await?;
+        let workflows = client.workflows_for_product(&product.id).await?;
+        for asc_workflow in workflows {
+            tracing::info!("importing Xcode Cloud workflow {}", asc_workflow.id);
+            Workflow::builder()
+                .app(self.clone())
+                .asc_id(asc_workflow.id)
+                .name(asc_workflow.name)
+                .description(asc_workflow.description)
+                .is_enabled(asc_workflow.is_enabled)
+                .is_locked_for_editing(asc_workflow.is_locked_for_editing)
+                .create_or_update_by([WorkflowColumns::AscId])?;
+        }
+
         let builds = client.build_runs_for_product(&product.id, 10).await?;
         for asc_build in builds {
             tracing::info!("importing ASC build {}", asc_build.id);
@@ -140,5 +157,43 @@ impl App {
         }
 
         Ok(builds.first().cloned())
+    }
+
+    pub fn current_valid_test_flight_build(&self) -> anyhow::Result<Option<TestFlightBuild>> {
+        let mut builds = self.test_flight_builds()?;
+        builds.sort_by_key(|build| (build.uploaded_date, build.expiration_date));
+        builds.reverse();
+
+        Ok(builds.into_iter().find(|build| build.is_valid()))
+    }
+
+    pub fn needs_auto_build(&self) -> anyhow::Result<bool> {
+        if self.auto_build_cooldown_active() {
+            return Ok(false);
+        }
+
+        let Some(build) = self.current_valid_test_flight_build()? else {
+            return Ok(true);
+        };
+
+        Ok(build.is_expired() || build.expires_within_days(7))
+    }
+
+    pub fn auto_build_cooldown_active(&self) -> bool {
+        self.auto_build_requested_at
+            .is_some_and(|requested_at| requested_at.is_within_last_hours(24))
+    }
+
+    pub fn workflows_for_build_start(&self) -> anyhow::Result<Vec<Workflow>> {
+        let mut workflows = self.workflows()?;
+        workflows.sort_by_key(|workflow| workflow.display_name().to_lowercase());
+        Ok(workflows)
+    }
+
+    pub fn first_startable_workflow(&self) -> anyhow::Result<Option<Workflow>> {
+        Ok(self
+            .workflows_for_build_start()?
+            .into_iter()
+            .find(|workflow| workflow.can_start()))
     }
 }

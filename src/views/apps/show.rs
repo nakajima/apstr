@@ -10,6 +10,9 @@ use crate::{
 };
 
 pub async fn show(app: &App) -> AppResult<Html<String>> {
+    let test_flight_build = app.current_test_flight_build()?;
+    let workflows = app.workflows_for_build_start()?;
+
     Ok(Html(
         page(
             &app.name,
@@ -33,7 +36,43 @@ pub async fn show(app: &App) -> AppResult<Html<String>> {
                     p { strong { "sync error: " } (sync_error) }
                 }
 
-                @if let Some(test_flight_build) = app.current_test_flight_build()? {
+                h2 { "Xcode Cloud" }
+                @if workflows.is_empty() {
+                    p { "No workflows synced yet" }
+                } @else {
+                    div.vstack.gap-2 {
+                        @for workflow in &workflows {
+                            form action=(format!("/apps/{}/builds", app.id)) method="post" {
+                                input type="hidden" name="workflow_id" value=(workflow.asc_id.as_str());
+                                div {
+                                    strong { (workflow.display_name()) }
+                                    @if let Some(description) = &workflow.description {
+                                        " " small { (description) }
+                                    }
+                                }
+                                label {
+                                    input type="checkbox" name="clean" value="1";
+                                    " clean build"
+                                }
+                                " "
+                                @if workflow.can_start() {
+                                    button type="submit" { "Start build" }
+                                } @else {
+                                    button type="submit" disabled { "Start build" }
+                                    " " small { "workflow disabled or locked" }
+                                }
+                            }
+                        }
+                    }
+                }
+                @if let Some(requested_at) = app.auto_build_requested_at {
+                    p { small { "last automatic build requested: " (requested_at.utc_date()) } }
+                }
+                @if let Some(auto_build_error) = &app.auto_build_error {
+                    p { strong { "auto-build error: " } (auto_build_error) }
+                }
+
+                @if let Some(test_flight_build) = &test_flight_build {
                     h2 { "TestFlight" }
                     dl {
                         dt { "version" }
