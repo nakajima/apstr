@@ -38,7 +38,9 @@ use crate::models::{
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
-    Connection::file("apstr.sqlite").expect("could not init db");
+    let database_path = std::env::var("DATABASE_PATH").unwrap_or("apstr.sqlite".to_string());
+
+    Connection::file(&database_path).expect("could not init db");
     let plan = SchemaBuilder::new()
         .model::<App>()
         .model::<Build>()
