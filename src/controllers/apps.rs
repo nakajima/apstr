@@ -5,6 +5,7 @@ use axum::{
     response::{Html, IntoResponse, Redirect},
 };
 use seekwel::*;
+use serde::Deserialize;
 
 use crate::{
     error::AppResult,
@@ -39,6 +40,26 @@ pub async fn destroy(Path(id): Path<u64>) -> AppResult<Redirect> {
     app.delete().with_context(|| format!("deleting app {id}"))?;
 
     Ok(Redirect::to("/apps"))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AutoBuildParams {
+    enabled: Option<String>,
+}
+
+pub async fn update_auto_build(
+    Path(id): Path<u64>,
+    Form(params): Form<AutoBuildParams>,
+) -> AppResult<Redirect> {
+    let mut app = App::find(id).with_context(|| format!("loading app {id}"))?;
+    app.auto_build_enabled = Some(matches!(
+        params.enabled.as_deref(),
+        Some("1" | "true" | "on" | "yes")
+    ));
+    app.save()
+        .with_context(|| format!("saving auto-build setting for app {id}"))?;
+
+    Ok(Redirect::to(&format!("/apps/{id}")))
 }
 
 pub async fn create(Form(params): Form<AppParams>) -> AppResult<impl IntoResponse> {

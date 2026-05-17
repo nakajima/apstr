@@ -37,6 +37,25 @@ pub async fn show(app: &App) -> AppResult<Html<String>> {
                 }
 
                 h2 { "Xcode Cloud" }
+                p {
+                    "automatic builds: "
+                    strong {
+                        @if app.auto_builds_enabled() {
+                            "enabled"
+                        } @else {
+                            "disabled"
+                        }
+                    }
+                }
+                form action=(format!("/apps/{}/auto-build", app.id)) method="post" {
+                    @if app.auto_builds_enabled() {
+                        input type="hidden" name="enabled" value="0";
+                        button type="submit" { "Disable automatic builds" }
+                    } @else {
+                        input type="hidden" name="enabled" value="1";
+                        button type="submit" { "Enable automatic builds" }
+                    }
+                }
                 @if workflows.is_empty() {
                     p { "No workflows synced yet" }
                 } @else {

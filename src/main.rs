@@ -67,6 +67,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/apps/new", get(controllers::apps::new))
         .route("/apps/{id}", get(controllers::apps::show))
         .route("/apps/{id}", delete(controllers::apps::destroy))
+        .route(
+            "/apps/{id}/auto-build",
+            post(controllers::apps::update_auto_build),
+        )
         .route("/apps/{id}/builds", post(controllers::builds::create))
         .route("/apps", post(controllers::apps::create))
         .route("/_health", get(health))

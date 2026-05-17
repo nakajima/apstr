@@ -18,6 +18,7 @@ pub struct App {
     pub bundle_identifier: String,
     pub built_at: Option<i64>,
     pub sync_error: Option<String>,
+    pub auto_build_enabled: Option<bool>,
     pub auto_build_requested_at: Option<Timestamp>,
     pub auto_build_error: Option<String>,
     #[key = app_id]
@@ -171,7 +172,7 @@ impl App {
     }
 
     pub fn needs_auto_build(&self) -> anyhow::Result<bool> {
-        if self.auto_build_cooldown_active() {
+        if !self.auto_builds_enabled() || self.auto_build_cooldown_active() {
             return Ok(false);
         }
 
@@ -185,6 +186,10 @@ impl App {
     pub fn auto_build_cooldown_active(&self) -> bool {
         self.auto_build_requested_at
             .is_some_and(|requested_at| requested_at.is_within_last_hours(24))
+    }
+
+    pub fn auto_builds_enabled(&self) -> bool {
+        self.auto_build_enabled.unwrap_or(true)
     }
 
     pub fn workflows_for_build_start(&self) -> anyhow::Result<Vec<Workflow>> {
