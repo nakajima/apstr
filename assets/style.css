@@ -12,7 +12,7 @@ html,
 body {
   background: var(--bg);
   color: var(--fg);
-  font-family: "CommitMono";
+  font-family: "CommitMono", monospace;
   font-width: expanded;
   font-size: 1rem;
 }
@@ -20,7 +20,7 @@ body {
 code,
 pre,
 textarea {
-  font-family: "CommitMono";
+  font-family: "CommitMono", monospace;
   font-width: expanded;
   font-size: 1rem;
 }

@@ -1,4 +1,4 @@
-use maud::{DOCTYPE, Markup, html};
+use maud::{html, Markup, DOCTYPE};
 
 pub fn page(title: &str, body: Markup) -> Markup {
     html! {
@@ -6,6 +6,7 @@ pub fn page(title: &str, body: Markup) -> Markup {
         html {
             head {
                 title { (title) }
+                link rel="preload" href="/assets/WOFF2/CommitMono.woff2" as="font" type="font/woff2" crossorigin="anonymous";
                 link rel="stylesheet" href="/assets/CommitMono.css";
                 link rel="stylesheet" href="/assets/normalize.css";
                 link rel="stylesheet" href="/assets/style.css";
