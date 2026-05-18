@@ -69,12 +69,10 @@ async fn main() -> anyhow::Result<()> {
         .merge(asset_routes())
         .route("/", get(controllers::apps::index))
         .route("/apps", get(Redirect::to("/")))
-        .route("/apps/new", get(controllers::apps::new))
         .route("/apps/{id}", get(controllers::apps::show))
         .route("/apps/{id}", delete(controllers::apps::destroy))
         .route("/apps/{id}", patch(controllers::apps::update))
         .route("/apps/{id}/builds", post(controllers::builds::create))
-        .route("/apps", post(controllers::apps::create))
         .route("/_health", get(health))
         .layer(middleware::from_fn(log_request_params))
         .layer(
