@@ -16,7 +16,12 @@ pub async fn index(apps: &[App]) -> AppResult<Html<String>> {
                         @for app in apps {
                             div.vstack.gap-2 {
                                 a href=(format!("/apps/{}", app.id)) {
-                                    h3.m-0 { (app.name) };
+                                    h3.m-0 {
+                                        (app.name)
+                                        @if app.archived {
+                                            span.subdue { " (archived)" }
+                                        }
+                                    };
                                 }
 
                                 @if let Some(build) = app.latest_build()? && let Some(number) = build.number {

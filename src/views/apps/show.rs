@@ -34,6 +34,27 @@ pub async fn show(app: &App) -> AppResult<Html<String>> {
                                         .confirm("Sure you want to delete this app?")
                                 )
                             )
+
+                            (
+                                form_for(app).method("PATCH").fields(|f| {
+                                    html! {
+                                        @if app.archived {
+                                            (f.hidden_field(AppColumns::Archived).attr("value", "0"))
+                                            (f.submit("unarchive").class("link"))
+                                        } @else {
+                                            (f.hidden_field(AppColumns::Archived).attr("value", "1"))
+                                            (f.submit("archive").class("link"))
+                                        }
+                                        
+                                    }
+                                })
+                                // button_to(
+                                //     ,
+                                //     format!("/apps/{}?app[archived]={}", app.id, if app.archived { "0" } else { "1" }).as_str(),
+                                //     ButtonToOptions::default()
+                                //         .with_method(FormMethod::Patch)
+                                // )
+                            )
                         }
                     }
 
@@ -134,16 +155,15 @@ pub async fn show(app: &App) -> AppResult<Html<String>> {
                         } @else {
                             div.vstack.gap-4 {
                                 @for workflow in &workflows {
-                                    form.vstack.gap-2 action=(format!("/apps/{}/builds", app.id)) method="post" {
+                                    form.vstack action=(format!("/apps/{}/builds", app.id)) method="post" {
                                         input type="hidden" name="workflow_id" value=(workflow.asc_id.as_str());
-                                        div {
+                                       
+                                        div.hstack.gap-2 {
                                             strong { (workflow.display_name()) }
                                             @if let Some(description) = &workflow.description {
                                                 " " small.subdue { (description) }
                                             }
-                                        }
-                                        
-                                        div.hstack.gap-2 {
+
                                             @if workflow.can_start() {
                                                 button type="submit" { "Start build" }
                                             } @else {

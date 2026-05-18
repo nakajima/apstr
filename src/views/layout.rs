@@ -18,13 +18,6 @@ pub fn page(title: &str, body: Markup) -> Markup {
                             span.white { (title) }
                         }
                     }
-                    a href="/apps/new" {
-                        "add app"
-                    }
-                    a href="/status" {
-                        "status"
-                    }
-
                 }
                 (body)
 

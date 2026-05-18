@@ -15,7 +15,7 @@ reqwest = { version = "0.12", default-features = false, features = [
   "rustls-tls",
 ] }
 rusqlite = "0.39.0"
-seekwel = { version = "0.1.23", features = ["serde", "tokio"] }
+seekwel = { version = "0.1.25", features = ["serde", "tokio"] }
 seekwel-forms = "0.1.2"
 serde = { version = "1.0.228", features = ["serde_derive"] }
 serde_json = "1"

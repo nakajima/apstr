@@ -23,6 +23,8 @@ pub struct App {
     pub auto_build_enabled: Option<bool>,
     pub auto_build_requested_at: Option<Timestamp>,
     pub auto_build_error: Option<String>,
+    #[default = false]
+    pub archived: bool,
     #[key = app_id]
     pub builds: HasMany<Build>,
     #[key = app_id]

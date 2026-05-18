@@ -38,7 +38,8 @@ body {
 }
 
 a,
-button.link {
+button.link,
+input[type="submit"].link {
   color: var(--primary);
   text-decoration: none;
   font: inherit;

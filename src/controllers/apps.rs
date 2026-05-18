@@ -13,7 +13,7 @@ use crate::{
 };
 
 pub async fn index() -> AppResult<Html<String>> {
-    let apps = App::order(AppColumns::BuiltAt.desc())
+    let apps = App::order([AppColumns::Archived.asc(), AppColumns::BuiltAt.desc()])
         .all()
         .context("loading apps for index page")?;
     views::apps::index(&apps).await
@@ -60,7 +60,11 @@ pub async fn update(
     Form(params): Form<AppParams>,
 ) -> AppResult<impl IntoResponse> {
     let mut app = App::find(id).with_context(|| format!("loading app {id}"))?;
-    match app.update(params.allow([AppColumns::AutoBuildEnabled, AppColumns::HookScript])) {
+    match app.update(params.allow([
+        AppColumns::AutoBuildEnabled,
+        AppColumns::HookScript,
+        AppColumns::Archived,
+    ])) {
         Ok(_) => Ok(Redirect::to(&format!("/apps/{}", app.id)).into_response()),
         Err(e) => Ok(views::apps::new(
             &e.into_invalid()

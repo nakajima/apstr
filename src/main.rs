@@ -42,6 +42,7 @@ async fn main() -> anyhow::Result<()> {
     let database_path = std::env::var("DATABASE_PATH").unwrap_or("apstr.sqlite".to_string());
 
     Connection::file(&database_path).expect("could not init db");
+
     let plan = SchemaBuilder::new()
         .model::<App>()
         .model::<Build>()
@@ -52,15 +53,17 @@ async fn main() -> anyhow::Result<()> {
         .expect("could not plan schema");
 
     if !plan.ops.is_empty() {
-        tracing::info!("applying plan: {plan:?}");
+        tracing::info!("applying plan: {:#?}", plan.ops);
     }
 
     plan.apply(ApplyMode::AllowDestructive)
         .expect("could not apply plan");
 
-    tracing::info!("starting syncer");
-    let syncer = crate::library::syncer::Syncer::new().context("initializing syncer")?;
-    tokio::spawn(syncer.start());
+    if std::env::var("NO_SYNC").as_deref().unwrap_or("") != "1" {
+        tracing::info!("starting syncer");
+        let syncer = crate::library::syncer::Syncer::new().context("initializing syncer")?;
+        tokio::spawn(syncer.start());
+    }
 
     let app = Router::new()
         .merge(asset_routes())
