@@ -18,7 +18,7 @@ use axum::{
     http::{HeaderMap, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Redirect, Response},
-    routing::{delete, get, post},
+    routing::{delete, get, patch, post},
 };
 use error::AppResult;
 use seekwel::{
@@ -31,7 +31,8 @@ use tower_http::trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, Tr
 use tower_method_hax::axum::MethodOverrideExt;
 
 use crate::models::{
-    app::App, build::Build, test_flight_build::TestFlightBuild, workflow::Workflow,
+    app::App, build::Build, hook_run::HookRun, test_flight_build::TestFlightBuild,
+    workflow::Workflow,
 };
 
 #[tokio::main]
@@ -46,6 +47,7 @@ async fn main() -> anyhow::Result<()> {
         .model::<Build>()
         .model::<TestFlightBuild>()
         .model::<Workflow>()
+        .model::<HookRun>()
         .plan()
         .expect("could not plan schema");
 
@@ -67,14 +69,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/apps/new", get(controllers::apps::new))
         .route("/apps/{id}", get(controllers::apps::show))
         .route("/apps/{id}", delete(controllers::apps::destroy))
-        .route(
-            "/apps/{id}/auto-build",
-            post(controllers::apps::update_auto_build),
-        )
-        .route(
-            "/apps/{id}/hook-script",
-            post(controllers::apps::update_hook_script),
-        )
+        .route("/apps/{id}", patch(controllers::apps::update))
         .route("/apps/{id}/builds", post(controllers::builds::create))
         .route("/apps", post(controllers::apps::create))
         .route("/_health", get(health))

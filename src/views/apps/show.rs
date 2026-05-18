@@ -1,12 +1,12 @@
 use anyhow::Context;
 use axum::response::Html;
 use maud::html;
-use seekwel_forms::FormMethod;
+use seekwel_forms::{FormMethod, form_for};
 
 use crate::{
     error::AppResult,
     helpers::button_to::{ButtonToOptions, button_to},
-    models::app::App,
+    models::app::{App, AppColumns},
     views::layout::page,
 };
 
@@ -15,17 +15,16 @@ pub async fn show(app: &App) -> AppResult<Html<String>> {
     let test_flight_build = app.current_test_flight_build()?;
     let workflows = app.workflows_for_build_start()?;
     let builds = app.recent_builds(10)?;
+    let hook_runs = app.recent_hook_runs(10)?;
 
     Ok(Html(
         page(
-            &app.name,
+            &format!("apps / {}", app.name),
             html! {
                 main.vstack.gap-8 {
                     header.vstack.gap-2 {
-                        h1.m-0 { (app.name) }
                         div.hstack.gap-4 {
                             code { (app.bundle_identifier) }
-                            a href=(format!("/apps/{}/edit", app.id)) { "edit" }
                             (
                                 button_to(
                                     "delete",
@@ -45,45 +44,90 @@ pub async fn show(app: &App) -> AppResult<Html<String>> {
                         }
                     }
 
-                    section.vstack.gap-4 {
-                        h2.m-0 { "Xcode Cloud" }
+                    section.vstack.gap-2 {
+                        h2.m-0 { "Hook script" }
 
-                        div.vstack.gap-2 {
-                            p.m-0 {
-                                "automatic builds: "
-                                strong {
-                                    @if app.auto_builds_enabled() {
-                                        "enabled"
-                                    } @else {
-                                        "disabled"
+                        div.hstack.gap-4.space-evenly {
+                            (form_for(app).class("grow vstack gap-2").fields(|f| {
+                                html! {
+                                    (f.label(AppColumns::HookScript, "Script Source"))
+                                    (f.textarea(AppColumns::HookScript).class("w-full flex-1").attr("rows", "10").attr("placeholder", "Enter a shell script here."))
+                                    (f.field_errors(AppColumns::HookScript))
+                                    div {
+                                        (f.submit("Save"))
+                                    }
+                                }
+                            }))
+
+                            @if hook_runs.is_empty() {
+                                p.grow.m-0 { "No hook runs yet" }
+                            } @else {
+                                ol.grow.vstack.gap-4 {
+                                    @for run in &hook_runs {
+                                        li.vstack.gap-2 {
+                                            div.hstack.gap-4 {
+                                                strong { (run.event_label.as_str()) }
+                                                span { (run.status()) }
+                                                small.subdue { (run.started_at.utc_datetime()) }
+                                            }
+                                            small.subdue {
+                                                "event: " (run.event.as_str())
+                                                @if let Some(exit_code) = run.exit_code {
+                                                    " exit: " (exit_code)
+                                                }
+                                                @if let Some(finished_at) = run.finished_at {
+                                                    " finished: " (finished_at.utc_datetime())
+                                                }
+                                            }
+                                            small.subdue { "command: " (run.command.as_str()) }
+                                            @if let Some(error) = &run.error {
+                                                div { strong { "error: " } (error) }
+                                            }
+                                            @if let Some(stdout) = &run.stdout {
+                                                div.vstack.gap-2 {
+                                                    small.subdue { "stdout" }
+                                                    pre { (stdout) }
+                                                }
+                                            }
+                                            @if let Some(stderr) = &run.stderr {
+                                                div.vstack.gap-2 {
+                                                    small.subdue { "stderr" }
+                                                    pre { (stderr) }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
-                            form action=(format!("/apps/{}/auto-build", app.id)) method="post" {
-                                @if app.auto_builds_enabled() {
-                                    input type="hidden" name="enabled" value="0";
-                                    button type="submit" { "Disable automatic builds" }
-                                } @else {
-                                    input type="hidden" name="enabled" value="1";
-                                    button type="submit" { "Enable automatic builds" }
-                                }
-                            }
-                            form.vstack.gap-2 action=(format!("/apps/{}/hook-script", app.id)) method="post" {
-                                label {
-                                    "hook script"
-                                    input type="text" name="hook_script" value=(app.hook_script.as_deref().unwrap_or(""));
-                                }
-                                div {
-                                    button type="submit" { "Save hook script" }
-                                }
-                            }
-                            @if let Some(requested_at) = app.auto_build_requested_at {
-                                small.subdue { "last automatic build requested: " (requested_at.utc_date()) }
-                            }
-                            @if let Some(auto_build_error) = &app.auto_build_error {
-                                p.m-0 { strong { "auto-build error: " } (auto_build_error) }
-                            }
                         }
+                    }
+
+                    section.vstack.gap-2 {
+                        h2.m-0 { "Xcode Cloud" }
+
+                        div.vstack.gap-2.mb-8 {
+                            (form_for(app).class("vstack gap-2").fields(|f| {
+                                html! {
+                                    (f.label(AppColumns::AutoBuildEnabled, html! {
+                                        (f.checkbox(AppColumns::AutoBuildEnabled))
+                                        " Automatically prevent TestFlight expiration"
+                                    }))
+                                    (f.field_errors(AppColumns::AutoBuildEnabled))
+                                    div.hstack.gap-2 {
+                                        (f.submit("Save"))
+
+                                        @if let Some(requested_at) = app.auto_build_requested_at {
+                                            small.subdue { "last automatic build requested: " (requested_at.utc_date()) }
+                                        }
+                                        @if let Some(auto_build_error) = &app.auto_build_error {
+                                            p.m-0 { strong { "auto-build error: " } (auto_build_error) }
+                                        }
+                                    }
+                                }
+                            }))
+                        }
+
+                        h3 { "Workflows"}
 
                         @if workflows.is_empty() {
                             p.m-0 { "No workflows synced yet" }
@@ -98,16 +142,18 @@ pub async fn show(app: &App) -> AppResult<Html<String>> {
                                                 " " small.subdue { (description) }
                                             }
                                         }
-                                        label {
-                                            input type="checkbox" name="clean" value="1";
-                                            " clean build"
-                                        }
-                                        div {
+                                        
+                                        div.hstack.gap-2 {
                                             @if workflow.can_start() {
                                                 button type="submit" { "Start build" }
                                             } @else {
                                                 button type="submit" disabled { "Start build" }
                                                 " " small.subdue { "workflow disabled or locked" }
+                                            }
+
+                                            label.inline {
+                                                input type="checkbox" name="clean" value="1";
+                                                " Clean build"
                                             }
                                         }
                                     }
@@ -118,40 +164,44 @@ pub async fn show(app: &App) -> AppResult<Html<String>> {
 
                     section.vstack.gap-4 {
                         h2.m-0 { "TestFlight" }
+
+                        
                         @if let Some(test_flight_build) = &test_flight_build {
-                            dl {
-                                dt { "version" }
-                                dd {
-                                    @if let Some(version) = &test_flight_build.version {
-                                        (version)
-                                    } @else {
-                                        "unknown"
+                            (test_flight_build.expiration_status())
+                            @if let Some(expiration_date) = test_flight_build.expiration_date {
+                                " (" (expiration_date.utc_date()) ")"
+                            }
+                            dl.vstack.gap-2 {
+                                div {
+                                    dt.inline.subdue { "Version " }
+                                    dd.inline {
+                                        @if let Some(version) = &test_flight_build.version {
+                                            (version)
+                                        } @else {
+                                            "unknown"
+                                        }
                                     }
                                 }
 
-                                dt { "state" }
-                                dd {
-                                    @if let Some(state) = &test_flight_build.processing_state {
-                                        (state)
-                                    } @else {
-                                        "unknown"
+                                div {
+                                    dt.inline.subdue { "State " }
+                                    dd.inline {
+                                        @if let Some(state) = &test_flight_build.processing_state {
+                                            (state)
+                                        } @else {
+                                            "unknown"
+                                        }
                                     }
                                 }
 
-                                dt { "uploaded" }
-                                dd {
-                                    @if let Some(uploaded_date) = test_flight_build.uploaded_date {
-                                        (uploaded_date.utc_date())
-                                    } @else {
-                                        "unknown"
-                                    }
-                                }
-
-                                dt { "expiration" }
-                                dd {
-                                    (test_flight_build.expiration_status())
-                                    @if let Some(expiration_date) = test_flight_build.expiration_date {
-                                        " (" (expiration_date.utc_date()) ")"
+                                div {
+                                    dt.inline.subdue { "Uploaded at " }
+                                    dd.inline {
+                                        @if let Some(uploaded_date) = test_flight_build.uploaded_date {
+                                            (uploaded_date.utc_date())
+                                        } @else {
+                                            "unknown"
+                                        }
                                     }
                                 }
                             }

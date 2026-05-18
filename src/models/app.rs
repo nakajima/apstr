@@ -5,6 +5,7 @@ use crate::{
     library::{app_store_connect::AppStoreConnectClient, hook_runner},
     models::{
         build::{Build, BuildColumns, Timestamp},
+        hook_run::HookRun,
         test_flight_build::{TestFlightBuild, TestFlightBuildColumns},
         workflow::{Workflow, WorkflowColumns},
     },
@@ -28,6 +29,8 @@ pub struct App {
     pub test_flight_builds: HasMany<TestFlightBuild>,
     #[key = app_id]
     pub workflows: HasMany<Workflow>,
+    #[key = app_id]
+    pub hook_runs: HasMany<HookRun>,
 }
 
 impl App {
@@ -168,6 +171,14 @@ impl App {
         builds.reverse();
         builds.truncate(limit);
         Ok(builds)
+    }
+
+    pub fn recent_hook_runs(&self, limit: usize) -> anyhow::Result<Vec<HookRun>> {
+        let mut runs = self.hook_runs()?;
+        runs.sort_by_key(|run| run.started_at);
+        runs.reverse();
+        runs.truncate(limit);
+        Ok(runs)
     }
 
     pub fn current_test_flight_build(&self) -> anyhow::Result<Option<TestFlightBuild>> {

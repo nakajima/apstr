@@ -36,6 +36,10 @@ impl Timestamp {
             .date()
             .to_string()
     }
+
+    pub fn utc_datetime(self) -> String {
+        self.0.to_string()
+    }
 }
 
 impl From<Timestamp> for i64 {

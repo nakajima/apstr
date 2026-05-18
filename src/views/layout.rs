@@ -11,9 +11,12 @@ pub fn page(title: &str, body: Markup) -> Markup {
                 link rel="stylesheet" href="/assets/style.css";
             }
             body {
-                nav.hstack.gap-8 {
+                nav.hstack.gap-8.mb-8 {
                     a href="/" {
-                        h1 { "APSTR" }
+                        h1 {
+                            "APSTR "
+                            span.white { (title) }
+                        }
                     }
                     a href="/apps/new" {
                         "add app"

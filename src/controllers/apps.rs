@@ -5,7 +5,6 @@ use axum::{
     response::{Html, IntoResponse, Redirect},
 };
 use seekwel::*;
-use serde::Deserialize;
 
 use crate::{
     error::AppResult,
@@ -42,53 +41,27 @@ pub async fn destroy(Path(id): Path<u64>) -> AppResult<Redirect> {
     Ok(Redirect::to("/apps"))
 }
 
-#[derive(Debug, Deserialize)]
-pub struct AutoBuildParams {
-    enabled: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct HookScriptParams {
-    hook_script: String,
-}
-
-pub async fn update_auto_build(
-    Path(id): Path<u64>,
-    Form(params): Form<AutoBuildParams>,
-) -> AppResult<Redirect> {
-    let mut app = App::find(id).with_context(|| format!("loading app {id}"))?;
-    app.auto_build_enabled = Some(matches!(
-        params.enabled.as_deref(),
-        Some("1" | "true" | "on" | "yes")
-    ));
-    app.save()
-        .with_context(|| format!("saving auto-build setting for app {id}"))?;
-
-    Ok(Redirect::to(&format!("/apps/{id}")))
-}
-
-pub async fn update_hook_script(
-    Path(id): Path<u64>,
-    Form(params): Form<HookScriptParams>,
-) -> AppResult<Redirect> {
-    let mut app = App::find(id).with_context(|| format!("loading app {id}"))?;
-    let hook_script = params.hook_script.trim();
-    app.hook_script = if hook_script.is_empty() {
-        None
-    } else {
-        Some(hook_script.to_string())
-    };
-    app.save()
-        .with_context(|| format!("saving hook script for app {id}"))?;
-
-    Ok(Redirect::to(&format!("/apps/{id}")))
-}
-
 pub async fn create(Form(params): Form<AppParams>) -> AppResult<impl IntoResponse> {
     let app = App::new(params.allow([AppColumns::Name, AppColumns::BundleIdentifier]))
         .context("building app from form params")?;
     match app.save() {
         Ok(_) => Ok(Redirect::to("/apps").into_response()),
+        Err(e) => Ok(views::apps::new(
+            &e.into_invalid()
+                .unwrap_or_else(|| unreachable!("we're in the error case")),
+        )
+        .await
+        .into_response()),
+    }
+}
+
+pub async fn update(
+    Path(id): Path<u64>,
+    Form(params): Form<AppParams>,
+) -> AppResult<impl IntoResponse> {
+    let mut app = App::find(id).with_context(|| format!("loading app {id}"))?;
+    match app.update(params.allow([AppColumns::AutoBuildEnabled, AppColumns::HookScript])) {
+        Ok(_) => Ok(Redirect::to(&format!("/apps/{}", app.id)).into_response()),
         Err(e) => Ok(views::apps::new(
             &e.into_invalid()
                 .unwrap_or_else(|| unreachable!("we're in the error case")),

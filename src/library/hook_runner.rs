@@ -1,12 +1,18 @@
 use std::{collections::BTreeMap, process::Stdio, time::Duration};
 
+use seekwel::PersistedModel;
 use tokio::{process::Command, time};
 
 use crate::models::{
-    app::App, build::Build, test_flight_build::TestFlightBuild, workflow::Workflow,
+    app::App,
+    build::{Build, Timestamp},
+    hook_run::HookRun,
+    test_flight_build::TestFlightBuild,
+    workflow::Workflow,
 };
 
 const HOOK_TIMEOUT: Duration = Duration::from_secs(30);
+const MAX_CAPTURED_OUTPUT_BYTES: usize = 64 * 1024;
 
 pub fn spawn_build_started(app: &App, build: &Build, workflow: &Workflow) {
     let mut env = hook_env(app, "build_started", "Build started");
@@ -112,18 +118,46 @@ fn spawn_hook(app: &App, env: BTreeMap<String, String>) {
 
     let script = script.to_string();
     let event = env.get("APSTR_EVENT").cloned().unwrap_or_default();
+    let event_label = env.get("APSTR_EVENT_LABEL").cloned().unwrap_or_default();
     let app_id = app.id;
+    let hook_run_id = create_hook_run(app, &script, &event, &event_label);
 
     tokio::spawn(async move {
-        run_hook(script, event, app_id, env).await;
+        let result = run_hook(&script, &event, app_id, env).await;
+        if let Some(hook_run_id) = hook_run_id {
+            update_hook_run(hook_run_id, result);
+        }
     });
 }
 
-async fn run_hook(script: String, event: String, app_id: u64, env: BTreeMap<String, String>) {
+fn create_hook_run(app: &App, script: &str, event: &str, event_label: &str) -> Option<u64> {
+    match HookRun::builder()
+        .app(app.clone())
+        .event(event)
+        .event_label(event_label)
+        .command(script)
+        .started_at(Timestamp::now())
+        .timed_out(false)
+        .create()
+    {
+        Ok(run) => Some(run.id),
+        Err(error) => {
+            tracing::warn!(app_id = app.id, event, %error, "failed to create hook run");
+            None
+        }
+    }
+}
+
+async fn run_hook(
+    script: &str,
+    event: &str,
+    app_id: u64,
+    env: BTreeMap<String, String>,
+) -> HookResult {
     let mut command = Command::new("/bin/sh");
     command
         .arg("-c")
-        .arg(&script)
+        .arg(script)
         .envs(env)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -131,26 +165,96 @@ async fn run_hook(script: String, event: String, app_id: u64, env: BTreeMap<Stri
         .kill_on_drop(true);
 
     match time::timeout(HOOK_TIMEOUT, command.output()).await {
-        Ok(Ok(output)) if output.status.success() => {
-            tracing::debug!(app_id, event, "hook script completed");
-        }
         Ok(Ok(output)) => {
-            tracing::warn!(
-                app_id,
-                event,
-                status = %output.status,
-                stdout = %String::from_utf8_lossy(&output.stdout),
-                stderr = %String::from_utf8_lossy(&output.stderr),
-                "hook script failed"
-            );
+            if output.status.success() {
+                tracing::debug!(app_id, event, "hook script completed");
+            } else {
+                tracing::warn!(
+                    app_id,
+                    event,
+                    status = %output.status,
+                    stdout = %String::from_utf8_lossy(&output.stdout),
+                    stderr = %String::from_utf8_lossy(&output.stderr),
+                    "hook script failed"
+                );
+            }
+
+            HookResult {
+                exit_code: output.status.code().map(i64::from),
+                stdout: Some(captured_output(&output.stdout)),
+                stderr: Some(captured_output(&output.stderr)),
+                error: if output.status.code().is_none() {
+                    Some(output.status.to_string())
+                } else {
+                    None
+                },
+                timed_out: false,
+            }
         }
         Ok(Err(error)) => {
             tracing::warn!(app_id, event, %error, "failed to run hook script");
+            HookResult {
+                exit_code: None,
+                stdout: None,
+                stderr: None,
+                error: Some(error.to_string()),
+                timed_out: false,
+            }
         }
         Err(_) => {
             tracing::warn!(app_id, event, timeout = ?HOOK_TIMEOUT, "hook script timed out");
+            HookResult {
+                exit_code: None,
+                stdout: None,
+                stderr: None,
+                error: Some(format!(
+                    "timed out after {} seconds",
+                    HOOK_TIMEOUT.as_secs()
+                )),
+                timed_out: true,
+            }
         }
     }
+}
+
+fn update_hook_run(id: u64, result: HookResult) {
+    let update = || -> anyhow::Result<()> {
+        let mut run = HookRun::find(id)?;
+        run.finished_at = Some(Timestamp::now());
+        run.exit_code = result.exit_code;
+        run.timed_out = result.timed_out;
+        run.stdout = result.stdout;
+        run.stderr = result.stderr;
+        run.error = result.error;
+        run.save()?;
+        Ok(())
+    };
+
+    if let Err(error) = update() {
+        tracing::warn!(hook_run_id = id, ?error, "failed to update hook run");
+    }
+}
+
+struct HookResult {
+    exit_code: Option<i64>,
+    stdout: Option<String>,
+    stderr: Option<String>,
+    error: Option<String>,
+    timed_out: bool,
+}
+
+fn captured_output(bytes: &[u8]) -> String {
+    let truncated = bytes.len() > MAX_CAPTURED_OUTPUT_BYTES;
+    let bytes = if truncated {
+        &bytes[..MAX_CAPTURED_OUTPUT_BYTES]
+    } else {
+        bytes
+    };
+    let mut output = String::from_utf8_lossy(bytes).into_owned();
+    if truncated {
+        output.push_str("\n[truncated]");
+    }
+    output
 }
 
 fn app_url(app: &App) -> Option<String> {

@@ -17,6 +17,18 @@ body {
   font-size: 1rem;
 }
 
+code,
+pre,
+textarea {
+  font-family: "CommitMono";
+  font-width: expanded;
+  font-size: 1rem;
+}
+
+textarea {
+  padding: 0.25rem;
+}
+
 body {
   padding: 1rem 2rem;
 }
@@ -50,6 +62,14 @@ button.link {
   align-items: center;
 }
 
+.hstack.space-evenly {
+  justify-content: space-evenly;
+}
+
+.grow {
+  flex-grow: 1;
+}
+
 .gap-2 {
   gap: 0.5rem;
 }
@@ -66,12 +86,26 @@ button.link {
   margin: 0;
 }
 
+.mb-8 {
+  margin: 0 0 2rem 0;
+}
+
 .inline {
   display: inline !important;
 }
 
+.w-full {
+  width: 100%;
+}
+
 /* forms */
 input[type="submit"],
+button {
+  padding: 2px 4px;
+  line-height: 1rem;
+}
+
+input[type="submit"].link,
 button.link {
   background: transparent;
   border: 0;
@@ -90,9 +124,9 @@ button.link {
 
 label {
   display: block;
-  margin-top: 1rem;
 }
 
+/* other stuff */
 .error {
   background: var(--error);
   padding: 0 2px;
@@ -101,4 +135,13 @@ label {
 
 .success {
   color: var(--success);
+}
+
+.white {
+  color: var(--fg);
+}
+
+section {
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--primary);
 }

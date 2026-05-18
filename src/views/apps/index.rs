@@ -11,8 +11,7 @@ pub async fn index(apps: &[App]) -> AppResult<Html<String>> {
         page(
             "apps",
             html! {
-                main.vstack.gap-4 {
-                    h1 { "apps" }
+                main.vstack.gap-4.mt-8 {
                     div.vstack.gap-8 {
                         @for app in apps {
                             div.vstack.gap-2 {
